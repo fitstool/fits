@@ -10,6 +10,7 @@
     </identity>
   </identification>
   <fileinfo>
+    <creatingApplicationName toolname="MediaInfo" toolversion="26.10" status="SINGLE_RESULT">0.5.3.5.2</creatingApplicationName>
     <filepath toolname="OIS File Information" toolversion="1.0" status="SINGLE_RESULT">/fits/testfiles/input/freeMXF-mxf1a.mxf</filepath>
     <filename toolname="OIS File Information" toolversion="1.0" status="SINGLE_RESULT">freeMXF-mxf1a.mxf</filename>
     <size toolname="MediaInfo" toolversion="22.09">623664</size>

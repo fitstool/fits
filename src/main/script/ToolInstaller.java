@@ -198,29 +198,49 @@ public class ToolInstaller {
     private void installMediaInfoLinux() throws IOException {
         var target = Files.createDirectories(toolDir.resolve(tool.linuxDir));
 
+        String arch = System.getProperty("os.arch");
+        String linuxOS = "";
+        if (arch.equals("aarch64") || arch.equals("arm64")) {
+            linuxOS = "arm64.";
+        } else if (arch.equals("amd64") || arch.equals("x86_64")) {
+            linuxOS = "amd64.";
+        } 
+
         // Install libmediainfo
-        var archive = downloadAndVerify(LINUX);
+        var archive = downloadAndVerify(LINUX + linuxOS);
         var temp = toolDir.resolve("temp");
         extractAr(archive, temp);
         extractTarZst(temp.resolve("data.tar.zst"), temp);
-
-        Files.move(temp.resolve("usr/lib/x86_64-linux-gnu/libmediainfo.so.0.0.0"),
+        if (linuxOS.equals("arm64.")) {
+            Files.move(temp.resolve("usr/lib/aarch64-linux-gnu/libmediainfo.so.0.0.0"),
+                target.resolve("libmediainfo.so.0"));  
+        } else {
+            Files.move(temp.resolve("usr/lib/x86_64-linux-gnu/libmediainfo.so.0.0.0"),
                 target.resolve("libmediainfo.so.0"));
+        }
 
         deleteDir(temp);
         Files.deleteIfExists(archive);
 
         // Install libzen
-        archive = downloadAndVerify(LINUX + "zen.");
+        archive = downloadAndVerify(LINUX + linuxOS + "zen.");
         temp = toolDir.resolve("temp");
         extractAr(archive, temp);
         extractTarZst(temp.resolve("data.tar.zst"), temp);
 
         Path libzen;
-        try (var files = Files.list(temp.resolve("usr/lib/x86_64-linux-gnu"))) {
+        if (linuxOS.equals("arm64.")) {
+            try (var files = Files.list(temp.resolve("usr/lib/aarch64-linux-gnu"))) {
             libzen = files.filter(file -> file.getFileName().toString().startsWith("libzen.so.0."))
                     .findFirst()
                     .orElseThrow(() -> new RuntimeException("Failed to find libzen shared library"));
+        }
+        } else {
+            try (var files = Files.list(temp.resolve("usr/lib/x86_64-linux-gnu"))) {
+            libzen = files.filter(file -> file.getFileName().toString().startsWith("libzen.so.0."))
+                    .findFirst()
+                    .orElseThrow(() -> new RuntimeException("Failed to find libzen shared library"));
+        }
         }
 
         Files.move(libzen, target.resolve("libzen.so.0"));
