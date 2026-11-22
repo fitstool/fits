@@ -1,0 +1,109 @@
+
+name: Update ExifTool
+
+on:
+  # schedule:
+  #   - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-exiftool:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Fetch version and checksums
+        id: exiftool
+        run: |
+          VERSION=$(curl -fsSL https://exiftool.org/ver.txt)
+          CHECKSUMS=$(curl -fsSL https://exiftool.org/checksums.txt)
+          UNIX_FILE="Image-ExifTool-${VERSION}.tar.gz"
+          WINDOWS_FILE="exiftool-${VERSION}_64.zip"
+
+          get_md5() {
+            echo "$CHECKSUMS" |
+              grep -F "$1" |
+              grep -i MD5 |
+              awk -F'= ' '{print $2}' |
+              tr -d '[:space:]'
+          }
+
+          UNIX_MD5=$(get_md5 "$UNIX_FILE")
+          WINDOWS_MD5=$(get_md5 "$WINDOWS_FILE")
+
+          if [ -z "$UNIX_MD5" ] || [ -z "$WINDOWS_MD5" ]; then
+            echo "Could not find both MD5 checksums"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "unix_md5=$UNIX_MD5" >> "$GITHUB_OUTPUT"
+          echo "windows_md5=$WINDOWS_MD5" >> "$GITHUB_OUTPUT"
+
+      - name: Update tools.properties
+        env:
+          VERSION: ${{ steps.exiftool.outputs.version }}
+          UNIX_MD5: ${{ steps.exiftool.outputs.unix_md5 }}
+          WINDOWS_MD5: ${{ steps.exiftool.outputs.windows_md5 }}
+        run: |
+          python3 <<'PY'
+          import os
+
+          path = "tools.properties"
+
+          version = os.environ["VERSION"]
+          unix_md5 = os.environ["UNIX_MD5"]
+          windows_md5 = os.environ["WINDOWS_MD5"]
+
+          properties = {
+                "exiftool.version": version,
+                "exiftool.unix.url":
+                    f"https://sourceforge.net/projects/exiftool/files/Image-ExifTool-{version}.tar.gz/download",
+                "exiftool.unix.md5": unix_md5,
+                "exiftool.windows.url":
+                    f"https://sourceforge.net/projects/exiftool/files/exiftool-{version}_64.zip/download",
+                "exiftool.windows.md5": windows_md5,
+          }
+
+          with open(path) as f:
+              lines = f.readlines()
+
+          for key, value in properties.items():
+              prefix = key + "="
+
+              for i, line in enumerate(lines):
+                  if line.startswith(prefix):
+                      lines[i] = f"{key}={value}\n"
+                      break
+              else:
+                  lines.append(f"{key}={value}\n")
+
+          with open(path, "w") as f:
+              f.writelines(lines)
+          PY
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: update-exiftool
+          delete-branch: true
+          title: "Update ExifTool to ${{ steps.exiftool.outputs.version }}"
+          commit-message: "Update ExifTool version and checksums"
+          body: |
+            Updates ExifTool version, download URLs, and MD5 checksums.
+          labels: dependencies
